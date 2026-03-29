@@ -1,0 +1,30 @@
+{
+  "name": "auto-erp",
+  "version": "0.3.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build --no-lint",
+    "start": "next start",
+    "lint": "next lint",
+    "verify:no-conflicts": "sh -c 'if rg -n \"^(<<<<<<<|=======|>>>>>>>)\" --glob \"!node_modules/**\" --glob \"!.next/**\" .; then echo \"Merge conflict markers detected. Resolve them before build.\"; exit 1; else echo \"No merge conflict markers found.\"; fi'"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.49.1",
+    "date-fns": "^4.1.0",
+    "next": "14.2.35",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "14.2.35",
+    "typescript": "^5.7.3"
+  }
+}
