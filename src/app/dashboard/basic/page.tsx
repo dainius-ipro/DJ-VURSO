@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any 123*/
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
@@ -181,25 +181,21 @@ export default function VursoBasic(){
       </div></div>);
 }
 
-// ══════ GANTT — today + forward, skip empty non-work days, 5 visible ══════
+// ══════ GANTT — scrollable, 14 work days forward, today=bottom ══════
 function GanttView({settings,schedOps,services,selectedDate,setSelectedDate,compact}:any){
   const hFrom=settings.work_hours_from||8;const hTo=settings.work_hours_to||18;
   const hours:number[]=[];for(let h=hFrom;h<=hTo;h++)hours.push(h);const totalMin=(hTo-hFrom)*60;
   const today=new Date();const lt=T.lt;
   const workDays=settings.work_days||[1,2,3,4,5];
-  // Generate work days: today + 21 forward (DST-safe)
+  // Generate 14 work days forward (DST-safe)
   const candidateDates:string[]=[];
-  for(let i=0;i<21;i++){const d=new Date(today.getFullYear(),today.getMonth(),today.getDate()+i);const ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");const dow=d.getDay();const dowN=dow===0?7:dow;
+  for(let i=0;candidateDates.length<14&&i<30;i++){const d=new Date(today.getFullYear(),today.getMonth(),today.getDate()+i);const ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");const dow=d.getDay();const dowN=dow===0?7:dow;
     const isWorkDay=workDays.includes(dowN);
     const hasOwnJob=!isWorkDay&&schedOps.some((op:any)=>op.scheduled_date===ds);
     if(isWorkDay||hasOwnJob)candidateDates.push(ds);
   }
-  // Find selectedDate, show 5 around it
-  let selIdx=candidateDates.indexOf(selectedDate);
-  if(selIdx<0){let bestIdx=0;let bestDiff=999;candidateDates.forEach((cd:string,ci:number)=>{const diff=Math.abs(new Date(cd).getTime()-new Date(selectedDate).getTime());if(diff<bestDiff){bestDiff=diff;bestIdx=ci;}});selIdx=bestIdx;}
-  let startIdx=Math.max(0,Math.min(selIdx-2,candidateDates.length-5));
-  if(startIdx<0)startIdx=0;
-  const dates=candidateDates.slice(startIdx,startIdx+5).reverse();
+  // Reversed: today at bottom, future at top
+  const dates=[...candidateDates].reverse();
   const svcMap:Record<string,any>={};(services||[]).forEach((s:any)=>{svcMap[s.service_key]=s;});
   const now=new Date();const nowMin=now.getHours()*60+now.getMinutes();const nowPct=Math.max(0,Math.min(100,((nowMin-hFrom*60)/totalMin)*100));const todayStr=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
   const screenH2=typeof window!=='undefined'?window.innerHeight:844;const navOffset=(screenH2<750?60:72)+8;
@@ -207,28 +203,43 @@ function GanttView({settings,schedOps,services,selectedDate,setSelectedDate,comp
   const dayLetter=(ds:string)=>{const d=new Date(ds+"T00:00:00");const dow=d.getDay();return lt.days_short[dow===0?6:dow-1];};
   const isWeekend=(ds:string)=>{const d=new Date(ds+"T00:00:00");const dow=d.getDay();return dow===0||dow===6;};
   const DWg=44;
+  const visibleRows=compact?4:5;const ganttH=visibleRows*rowH+36;
+  const scrollRef=useRef<HTMLDivElement>(null);
+  const dayScrollRef=useRef<HTMLDivElement>(null);
+  // Scroll to bottom (today) on mount
+  useEffect(()=>{setTimeout(()=>{if(scrollRef.current)scrollRef.current.scrollTop=scrollRef.current.scrollHeight;if(dayScrollRef.current)dayScrollRef.current.scrollTop=dayScrollRef.current.scrollHeight;},50);},[]);
+  // Sync vertical scroll between day labels and gantt rows
+  const syncing=useRef(false);
+  const syncScroll=(src:"day"|"gantt")=>{if(syncing.current)return;syncing.current=true;
+    if(src==="gantt"&&scrollRef.current&&dayScrollRef.current){dayScrollRef.current.scrollTop=scrollRef.current.scrollTop;}
+    if(src==="day"&&dayScrollRef.current&&scrollRef.current){scrollRef.current.scrollTop=dayScrollRef.current.scrollTop;}
+    requestAnimationFrame(()=>{syncing.current=false;});
+  };
   return(
     <div style={{zIndex:20,marginRight:-navOffset,padding:"0 16px"}}>
-      <div style={{display:"flex",background:"#ffffff",borderRadius:32,overflow:"hidden",boxShadow:compact?"none":"0 4px 14px 0 #E0E0E2"}}>
-      {/* Day labels column */}
-      <div style={{width:DWg,minWidth:DWg,flexShrink:0,zIndex:15}}>
-        <div style={{height:36}}/>
+      <div style={{display:"flex",background:"#ffffff",borderRadius:32,overflow:"hidden",boxShadow:compact?"none":"0 4px 14px 0 #E0E0E2",height:ganttH}}>
+      {/* Day labels column — synced scroll */}
+      <div style={{width:DWg,minWidth:DWg,flexShrink:0,zIndex:15,display:"flex",flexDirection:"column"}}>
+        <div style={{height:36,flexShrink:0}}/>
+        <div ref={dayScrollRef} onScroll={()=>syncScroll("day")} style={{flex:1,overflowY:"auto",overflowX:"hidden",scrollbarWidth:"none",overscrollBehavior:"contain"}} className="hide-scrollbar">
         {dates.map((ds:string)=>{const isSel=ds===selectedDate;const isToday=ds===todayStr;const dayNum=ds.slice(8,10);const wknd=isWeekend(ds);
-          return(<div key={ds} onClick={()=>setSelectedDate?.(ds)} style={{height:rowH,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+          return(<div key={ds} onClick={()=>setSelectedDate?.(ds)} style={{height:rowH,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>
             {isSel?(<div style={{width:34,height:34,borderRadius:17,background:C.accent,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:800,color:wknd?"#ff1f00":"#fff",lineHeight:1}}>{dayNum}</span><span style={{fontSize:9,fontWeight:700,color:wknd?"#ff1f00aa":"rgba(255,255,255,0.7)",lineHeight:1,marginTop:1}}>{dayLetter(ds)}</span></div>)
             :(<><span style={{fontSize:15,fontWeight:isToday?800:600,color:wknd?"#ff1f00":isToday?C.text:C.textMuted,lineHeight:1}}>{dayNum}</span><span style={{fontSize:9,fontWeight:600,color:wknd?"#ff1f00":C.textLight,lineHeight:1,marginTop:2}}>{dayLetter(ds)}</span></>)}
           </div>);})}
+        </div>
       </div>
       <div style={{width:4,flexShrink:0}}/>
-      {/* Scrollable gantt area (horizontal only) */}
-      <div style={{flex:1,overflowX:"auto",overflowY:"hidden",paddingLeft:8}}>
-        <div style={{minWidth:ganttW}}>
-          {/* Hours header */}
-          <div style={{display:"flex",borderBottom:"1px solid "+C.borderLight,position:"relative"}}>{hours.map((h:number,i:number)=>{const isNowH=h===now.getHours()&&todayStr===selectedDate;return(<div key={h} style={{width:colW,minWidth:colW,padding:"10px 0",fontSize:12,fontWeight:isNowH?800:600,color:isNowH?C.accent:C.textMuted,fontFamily:FONT_MONO,position:"relative"}}><span style={{position:"absolute",left:0,transform:"translateX(-50%)"}}>{h}</span></div>);})}</div>
-          {/* Rows */}
+      {/* Gantt area — horizontal scroll + synced vertical scroll */}
+      <div style={{flex:1,overflowX:"auto",overflowY:"hidden",display:"flex",flexDirection:"column"}}>
+        {/* Fixed hours header */}
+        <div style={{display:"flex",borderBottom:"1px solid "+C.borderLight,position:"relative",flexShrink:0,minWidth:ganttW,paddingLeft:8}}>{hours.map((h:number,i:number)=>{const isNowH=h===now.getHours()&&dates.includes(todayStr);return(<div key={h} style={{width:colW,minWidth:colW,padding:"10px 0",fontSize:12,fontWeight:isNowH?800:600,color:isNowH?C.accent:C.textMuted,fontFamily:FONT_MONO,position:"relative"}}><span style={{position:"absolute",left:0,transform:"translateX(-50%)"}}>{h}</span></div>);})}</div>
+        {/* Vertically scrollable rows */}
+        <div ref={scrollRef} onScroll={()=>syncScroll("gantt")} style={{flex:1,overflowY:"auto",overflowX:"hidden",paddingLeft:8,scrollbarWidth:"none",overscrollBehavior:"contain"}} className="hide-scrollbar">
+          <div style={{minWidth:ganttW}}>
           {dates.map((ds:string,di:number)=>{const isSel=ds===selectedDate;const isToday=ds===todayStr;const isLast=di===dates.length-1;
             const dateOps=schedOps.filter((op:any)=>{const s=op.scheduled_date;const e=op.end_date||op.scheduled_date;return ds>=s&&ds<=e;});
-            return(<div key={ds} onClick={()=>setSelectedDate?.(ds)} style={{display:"flex",position:"relative",height:rowH,borderBottom:isLast?"none":"1.5px solid #d1d1d6",background:isSel?C.surface2+"80":"transparent",cursor:"pointer"}}>
+            return(<div key={ds} onClick={()=>setSelectedDate?.(ds)} style={{display:"flex",position:"relative",height:rowH,flexShrink:0,borderBottom:isLast?"none":"1.5px solid #d1d1d6",background:isSel?C.surface2+"80":"transparent",cursor:"pointer"}}>
               {hours.map((h:number,i:number)=>(<div key={h} style={{width:colW,minWidth:colW,borderLeft:"1px solid "+C.borderLight}}/>))}
               {isToday&&nowPct>=0&&nowPct<=100&&<div style={{position:"absolute",left:(nowPct/100)*ganttW,top:0,bottom:0,width:0,borderLeft:"2px dashed "+C.accent,zIndex:5,opacity:0.7}}/>}
               {(()=>{
@@ -250,7 +261,9 @@ function GanttView({settings,schedOps,services,selectedDate,setSelectedDate,comp
                   return(<div key={opItem.id} style={{position:"absolute",left,width,top:topPos,height:laneH-1,borderRadius:laneCount>3?8:16,background:bc,display:"flex",alignItems:"center",padding:showText?"0 8px":"0",overflow:"hidden",boxShadow:"2px 2px 4px 0 rgba(0,0,0,0.15)"}}>{showText&&<span style={{fontSize:compact?8:laneCount>1?9:11,fontWeight:700,color:"#fff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{opItem.title||opItem.vehicle_plate||""}</span>}</div>);
                 }));
               })()}</div>);})}
-        </div></div></div></div>);
+          </div>
+        </div>
+      </div></div></div>);
 }
 
 // ══════ MAIN PAGE ══════
@@ -263,9 +276,13 @@ function MainPage({t,settings,services,schedOps,selectedDate,setSelectedDate,onE
   const nowTime=new Date();const timeStr=String(nowTime.getHours()).padStart(2,"0")+":"+String(nowTime.getMinutes()).padStart(2,"0");
   const RPill=({label,color}:{label:string;color:string})=>(<div style={{display:"flex",justifyContent:"flex-end",marginBottom:6,marginTop:10}}><span style={{fontSize:12,fontWeight:700,color,background:color+"12",padding:"5px 16px",borderRadius:14}}>{label}</span></div>);
   return(
-    <div style={{display:"flex",flexDirection:"column",minHeight:"100vh"}}>
-      <GanttView settings={settings} schedOps={schedOps} services={services} selectedDate={selectedDate} setSelectedDate={setSelectedDate}/>
-      <div style={{padding:"16px 14px",display:"flex",flexDirection:"column",gap:0}}>
+    <div style={{display:"flex",flexDirection:"column",height:"100vh",overflow:"hidden"}}>
+      {/* Gantt — fixed top block, higher z-index so cards scroll behind it */}
+      <div style={{flexShrink:0,position:"relative",zIndex:10,background:C.bg}}>
+        <GanttView settings={settings} schedOps={schedOps} services={services} selectedDate={selectedDate} setSelectedDate={setSelectedDate}/>
+      </div>
+      {/* Cards — scrollable below, can go behind gantt */}
+      <div style={{flex:1,overflow:"auto",padding:"16px 14px",display:"flex",flexDirection:"column",gap:0}}>
         <div style={{marginBottom:4}}>
           <div style={{fontSize:20,fontWeight:800,color:C.text}}>{fmtH(selectedDate)}</div>
           <div style={{fontSize:13,color:C.textMuted,marginTop:2}}>{timeStr}</div>
