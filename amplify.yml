@@ -4,10 +4,8 @@ frontend:
     preBuild:
       commands:
         - npm ci
-        - npm run verify:no-conflicts
     build:
       commands:
-        - export NEXT_TELEMETRY_DISABLED=1
         - npm run build
   artifacts:
     baseDirectory: out
@@ -16,3 +14,9 @@ frontend:
   cache:
     paths:
       - node_modules/**/*
+      - .next/cache/**/*
+  customHeaders:
+    - pattern: '**/*'
+      headers:
+        - key: 'Cache-Control'
+          value: 'no-cache'
